@@ -161,12 +161,8 @@
                             <button id="modify-workout-ai-btn" class="btn-primary text-lg py-3 px-6">🦾 Editar Rutina con IA</button>
                         </div>
                     </div>
-                    <div class="flex justify-center flex-wrap gap-2 mb-8" id="workout-nav">
-                        <button data-day="1" class="workout-day-btn active px-4 py-2 text-sm font-bold rounded-md">Día 1</button>
-                        <button data-day="2" class="workout-day-btn px-4 py-2 text-sm font-bold rounded-md">Día 2</button>
-                        <button data-day="3" class="workout-day-btn px-4 py-2 text-sm font-bold rounded-md">Día 3</button>
-                        <button data-day="4" class="workout-day-btn px-4 py-2 text-sm font-bold rounded-md">Día 4</button>
-                        <button data-day="5" class="workout-day-btn px-4 py-2 text-sm font-bold rounded-md">Día 5</button>
+                    <div class="flex justify-center flex-wrap items-center gap-2 mb-8" id="workout-nav">
+                        <!-- Los botones de los días se renderizarán aquí dinámicamente -->
                     </div>
                     <div id="workout-content" class="card">
                         <!-- El contenido de la rutina se renderizará aquí -->
@@ -225,13 +221,28 @@ document.addEventListener('DOMContentLoaded', function () {
     function renderMacroChart() { if (macroChartInstance) { macroChartInstance.destroy(); } macroChartInstance = new Chart(document.getElementById('macroChart').getContext('2d'), { type: 'doughnut', data: { labels: ['Proteína', 'Carbs', 'Grasas'], datasets: [{ data: [macroData.proteina * 4, macroData.carbs * 4, macroData.grasas * 9], backgroundColor: ['#dc2626', '#f5f5f5', '#525252'], borderColor: 'rgba(24, 24, 24, 0.85)', borderWidth: 4, hoverOffset: 8 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'bottom', labels: { color: '#e5e5e5' }}, tooltip: { callbacks: { label: c => `${c.label}: ${c.raw.toFixed(0)} kcal (${((c.raw/c.chart.getDatasetMeta(0).total)*100).toFixed(1)}%)` }}}} }); }
     function updateMacroDisplay() { document.getElementById('total-calorias').textContent = Math.round(macroData.calorias); document.getElementById('gramos-proteina').textContent = `${Math.round(macroData.proteina)}g`; document.getElementById('gramos-carbs').textContent = `${Math.round(macroData.carbs)}g`; document.getElementById('gramos-grasas').textContent = `${Math.round(macroData.grasas)}g`; renderMacroChart(); renderDailyLog(); }
     
-    // ===== LÓGICA DE ENTRENAMIENTO (MODIFICADA) =====
+    // ===== LÓGICA DE ENTRENAMIENTO (MODIFICADA Y MEJORADA) =====
     function saveWorkoutData() {
         localStorage.setItem('fitnessWorkoutDataDR', JSON.stringify(workoutData));
     }
-    
-    // --- Renderizado de la rutina (vista normal y edición) ---
+
+    function renderWorkoutNav() {
+        const days = Object.keys(workoutData).sort((a, b) => a - b);
+        let buttonsHTML = days.map(day =>
+            `<button data-day="${day}" class="workout-day-btn px-4 py-2 text-sm font-bold rounded-md ${day === activeWorkoutDay ? 'active' : ''}">Día ${day}</button>`
+        ).join('');
+
+        if (isEditingWorkout) {
+            buttonsHTML += `<button id="add-workout-day-btn" class="bg-green-700 hover:bg-green-600 text-white px-4 py-2 text-sm font-bold rounded-md ml-2">+ Añadir Día</button>`;
+        }
+        workoutNav.innerHTML = buttonsHTML;
+    }
+
     function renderWorkout() {
+        if (!workoutData[activeWorkoutDay]) {
+            activeWorkoutDay = Object.keys(workoutData)[0] || '1';
+        }
+        renderWorkoutNav();
         if (isEditingWorkout) {
             renderEditableWorkoutView(activeWorkoutDay);
         } else {
@@ -241,8 +252,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function renderStaticWorkoutView(day) {
         const data = workoutData[day];
-        let isModified = JSON.stringify(data) !== JSON.stringify(defaultWorkoutData[day]);
-        let revertButtonHtml = isModified ? `<div class="text-center mt-4"><button id="revert-workout-btn" class="btn-secondary">Revertir al Original</button></div>` : '';
+        if (!data) {
+            workoutContent.innerHTML = `<p class="text-center text-yellow-400">No hay datos para este día. Intenta añadir uno en el modo de edición.</p>`;
+            return;
+        }
+        let isModified = defaultWorkoutData[day] ? JSON.stringify(data) !== JSON.stringify(defaultWorkoutData[day]) : true;
+        let revertButtonHtml = isModified && defaultWorkoutData[day] ? `<div class="text-center mt-4"><button id="revert-workout-btn" class="btn-secondary">Revertir al Original</button></div>` : '';
         
         const createTableHTML = (exercises) => {
              const header = `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-red-500 border-b border-gray-700"><th class="p-2">Ejercicio</th><th class="p-2 text-center">Series</th><th class="p-2 text-center">Reps</th><th class="p-2 text-center">Descanso</th><th class="p-2 text-center">RIR</th><th class="p-2 text-center">Asistente IA</th></tr></thead>`;
@@ -253,7 +268,7 @@ document.addEventListener('DOMContentLoaded', function () {
         let html = `<h3 class="text-xl font-bold mb-2 text-white">${data.title}</h3><p class="text-gray-400 mb-4">${data.description}</p>`;
         html += createTableHTML(data.main_work || []);
         if (data.specific_work && data.specific_work.length > 0) { html += `<h4 class="text-lg font-semibold mt-6 mb-2 text-red-400">Trabajo Específico</h4>`; html += createTableHTML(data.specific_work); }
-        if (data.cardio) { html += `<h4 class="text-lg font-semibold mt-6 mb-2 text-cyan-400">Cardio Finalizador</h4>`; html += `<div class="bg-black/20 p-4 rounded-lg border border-gray-700"><p class="text-xl font-bold text-center text-white">${data.cardio.name}</p><p class="text-md text-gray-400 text-center mt-1">${data.cardio.details}</p></div>`; }
+        if (data.cardio && data.cardio.name) { html += `<h4 class="text-lg font-semibold mt-6 mb-2 text-cyan-400">Cardio Finalizador</h4>`; html += `<div class="bg-black/20 p-4 rounded-lg border border-gray-700"><p class="text-xl font-bold text-center text-white">${data.cardio.name}</p><p class="text-md text-gray-400 text-center mt-1">${data.cardio.details}</p></div>`; }
         
         workoutContent.innerHTML = html + revertButtonHtml;
         populateExerciseSelects();
@@ -279,7 +294,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="text-left text-red-500 border-b border-gray-700">
-                                <th class="p-2">Ejercicio</th><th class="p-2">Series</th><th class="p-2">Reps</th><th class="p-2">Descanso</th><th class="p-2">RIR</th><th class="p-2"></th>
+                                <th class="p-2">Ejercicio</th><th class="p-2">Series</th><th class="p-2">Reps</th><th class="p-2">Descanso</th><th class="p-2">RIR</th><th></th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-800">${tableRows}</tbody>
@@ -321,16 +336,18 @@ document.addEventListener('DOMContentLoaded', function () {
                 <button id="cancel-workout-edit-btn" class="btn-secondary text-lg py-2 px-6">Cancelar</button>
                 <button id="save-workout-changes-btn" class="btn-primary text-lg py-2 px-6">✅ Guardar Cambios</button>
             </div>
+            <div class="border-t border-red-800/50 mt-8 pt-4 text-center">
+                 <button id="delete-workout-day-btn" class="btn-danger text-base py-2 px-4">🗑️ Eliminar Día ${day}</button>
+            </div>
         `;
         workoutContent.innerHTML = html;
     }
 
-    // --- Manejo de eventos para la edición ---
     function toggleEditMode(edit) {
         isEditingWorkout = edit;
         manualEditBtn.style.display = edit ? 'none' : 'inline-block';
         aiEditBtn.style.display = edit ? 'none' : 'inline-block';
-        renderWorkout();
+        renderWorkout(); // This will call renderWorkoutNav() internally
     }
 
     manualEditBtn.addEventListener('click', () => toggleEditMode(true));
@@ -399,17 +416,45 @@ document.addEventListener('DOMContentLoaded', function () {
                 showAlert('Rutina restaurada a la versión original.');
             });
         }
+        if (e.target.id === 'delete-workout-day-btn') {
+            const dayCount = Object.keys(workoutData).length;
+            if (dayCount <= 1) {
+                showAlert('No puedes eliminar el último día de entrenamiento.');
+                return;
+            }
+            showConfirm(`¿Estás seguro de que quieres eliminar permanentemente el Día ${activeWorkoutDay}?`, () => {
+                delete workoutData[activeWorkoutDay];
+                saveWorkoutData();
+                activeWorkoutDay = Object.keys(workoutData).sort((a,b) => a - b)[0];
+                renderWorkout();
+                showAlert(`Día ${activeWorkoutDay} eliminado.`);
+            });
+        }
     });
 
     workoutNav.addEventListener('click', e => {
         if (e.target.tagName === 'BUTTON') {
+            if (e.target.id === 'add-workout-day-btn') {
+                const dayNumbers = Object.keys(workoutData).map(Number);
+                const newDayNumber = dayNumbers.length > 0 ? Math.max(...dayNumbers) + 1 : 1;
+                workoutData[newDayNumber] = {
+                    title: `Día ${newDayNumber}: Nuevo Entrenamiento`,
+                    description: 'Personaliza tu nuevo día de entrenamiento.',
+                    main_work: [{name: 'Nuevo Ejercicio', sets: '3', reps: '10', rest: '90s', rir: '2'}],
+                    specific_work: [],
+                    cardio: { name: '', details: '' }
+                };
+                saveWorkoutData();
+                activeWorkoutDay = newDayNumber.toString();
+                renderWorkout();
+                return;
+            }
+
             if (isEditingWorkout) {
                 showAlert('Guarda o cancela tus cambios antes de cambiar de día.');
                 return;
             }
             activeWorkoutDay = e.target.dataset.day;
-            workoutNav.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
-            e.target.classList.add('active');
             renderWorkout();
         }
     });
@@ -511,7 +556,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!request) { showAlert('Por favor, describe tu petición.'); return; }
             showAiModalLoading('Aplicando cambios a la rutina...');
             const currentWorkoutJSON = JSON.stringify(workoutData[activeWorkoutDay]);
-            const prompt = `Eres un coach de fitness experto. Un usuario quiere modificar su rutina de hoy. La rutina actual del día es este objeto JSON: ${currentWorkoutJSON}. La petición del usuario es: "${request}". Analiza la petición y modifica el objeto JSON para cumplirla. Puedes añadir, eliminar o modificar ejercicios, series, repeticiones, etc., para adaptarte a la petición del usuario. Devuelve ÚNICAMENTE el objeto JSON COMPLETO y MODIFICADO para el día de entrenamiento. No incluyas explicaciones ni texto adicional, solo el JSON final.`;
+            const prompt = `Actúa como un preparador físico de élite de nivel mundial. Un atleta te ha pedido ajustar su plan de entrenamiento para hoy. Su solicitud específica es: "${request}". La rutina actual para hoy se encuentra en este objeto JSON: ${currentWorkoutJSON}. Tu tarea es analizar la solicitud y reescribir el objeto JSON completo para reflejar los cambios de la manera más inteligente y fisiológicamente sensata posible. Mantén la estructura exacta del JSON (claves: title, description, main_work, specific_work, cardio). El array 'main_work' es para los ejercicios compuestos principales, y 'specific_work' para accesorios o aislamiento. Asegúrate de que las propiedades de cada ejercicio (name, sets, reps, rest, rir) sean coherentes y estén bien fundamentadas. Tu respuesta DEBE ser exclusivamente el objeto JSON modificado, sin ningún texto, explicación o markdown adicional.`;
             try {
                 const result = await callGeminiAPI(prompt);
                 if (result.error) throw new Error(result.error);
@@ -544,7 +589,7 @@ document.addEventListener('DOMContentLoaded', function () {
     renderMeasurements(); 
     renderNotes(); 
     renderLifts();
-    renderWorkout(); // Llama a la función principal de renderizado
+    renderWorkout(); // Llama a la función principal de renderizado de entrenamiento
     checkDateAndResetLog();
     renderDailyLog();
     updateMacroDisplay(); 
